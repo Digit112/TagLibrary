@@ -1,3 +1,5 @@
+import unicodedata
+
 class TagIntegrityError(RuntimeError):
 	def __init__(self, message, /, *args, **kwargs):
 		super().__init__(message, *args, **kwargs)
@@ -16,9 +18,28 @@ class TagLibrary:
 			with open(fn, "r"):
 				pass
 	
+	# Returns a lowercase, unicode-normalized version of the string.
+	# Throws on invalid tags such as those containing the comma, parentheses, control, or non-printing characters.
+	def validate_and_normalize(self, tag):
+		tag = unicodedata.normalize("NFKC", tag.strip().lower())
+		
+		for letter in tag:
+			if unicodedata.category(letter) in ["Zl", "Zp", "Cc", "Cf", "Cs", "Co", "Cn"]:
+				raise ValueError("Tag name must not include control or formatting unicode characters.")
+			
+			if letter == ',':
+				raise ValueError("Tag name must not include the comma.")
+			
+			if letter in ['(', ')']:
+				raise ValueError("Tag name must not include parentheses.")
+		
+		return tag
+	
 	# Create a new tag.
 	# Errors if the tag already exists.
 	def create(self, tag):
+		tag = self.validate_and_normalize(tag)
+		
 		current_node = self.root
 		cursor_i = 0
 		
@@ -31,7 +52,7 @@ class TagLibrary:
 			cursor_i += 1
 			
 		if current_node.tag_id is not None:
-			raise RuntimeError(f"Tag '{tag}' already exists.")
+			raise TagIntegrityError(f"Tag '{tag}' already exists.")
 		
 		current_node.tag_id = self.next_id
 		current_node.antecedents = []
@@ -43,6 +64,8 @@ class TagLibrary:
 	
 	# Returns the node for the requested tag if it exists, or None if it doesn't
 	def has(self, tag):
+		tag = self.validate_and_normalize(tag)
+		
 		current_node = self.root
 		cursor_i = 0
 		
@@ -67,9 +90,12 @@ class TagLibrary:
 	def get(self, tag):
 		res = self.has(tag)
 		if res is None:
-			raise RuntimeError(f"No such tag '{tag}'.")
+			raise TagIntegrityError(f"No such tag '{tag}'.")
 		
 		return res
+	
+	def __iter__(self):
+		yield from self.root
 	
 	# Checks all the types and inter-relationships between all the tags!
 	# A slow function used only for testing.
@@ -127,6 +153,10 @@ class TagNode:
 	def imply(self, other):
 		self_canon = self.get_canon()
 		other_canon = other.get_canon()
+		
+		if self_canon is other_canon:
+			raise TagIntegrityError(f"Tag {self.tag_id} cannot imply {other.tag_id}, its alias!")
+		
 		print(f"Imply {self.tag_id} (= {self_canon.tag_id}) -> {other.tag_id} (= {other_canon.tag_id})")
 		
 		if not self_canon.does_directly_imply(other_canon):
@@ -177,6 +207,13 @@ class TagNode:
 				raise RuntimeError(f"While validating '{curr_tag + chr(key)}': {e.message}")
 		
 		self.validate_referential_integrity()
+	
+	def __iter__(self):
+		if self.tag_id is not None:
+			yield self
+		
+		for child in self.children.values():
+			yield from child
 	
 	def __repr__(self):
 		if self.tag_id is None:

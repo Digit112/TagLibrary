@@ -1,6 +1,6 @@
 import pytest
 
-from TagLibrary import TagLibrary
+from TagLibrary import TagLibrary, TagIntegrityError
 
 def test_self_reference_error():
 	lib = TagLibrary(None)
@@ -9,6 +9,50 @@ def test_self_reference_error():
 	
 	with pytest.raises(RuntimeError):
 		lib.validate_integrity()
+
+def test_tag_validation():
+	lib = TagLibrary(None)
+	
+	with pytest.raises(ValueError):
+		tag = lib.create("tag,")
+	lib.validate_integrity()
+	
+	with pytest.raises(ValueError):
+		tag = lib.create("tag)")
+	lib.validate_integrity()
+	
+	with pytest.raises(ValueError):
+		tag = lib.create("tag(")
+	lib.validate_integrity()
+	
+	with pytest.raises(ValueError):
+		tag = lib.create("tag\n")
+	lib.validate_integrity()
+
+def test_basic_integrity_errors():
+	lib = TagLibrary(None)
+	
+	tag = lib.create("tagggg")
+	
+	tag.tag_id = None
+	with pytest.raises(RuntimeError):
+		lib.validate_integrity()
+	tag.tag_id = 1
+	
+	tag.antecedents = None
+	with pytest.raises(RuntimeError):
+		lib.validate_integrity()
+	tag.antecedents = []
+	
+	tag.implicants = None
+	with pytest.raises(RuntimeError):
+		lib.validate_integrity()
+	tag.implicants = []
+	
+	tag.consequents = None
+	with pytest.raises(RuntimeError):
+		lib.validate_integrity()
+	tag.consequents = []
 
 def test_dupe_errors():
 	lib = TagLibrary(None)
@@ -41,7 +85,46 @@ def test_dupe_errors():
 	with pytest.raises(RuntimeError):
 		tag2.consequents += con
 		lib.validate_integrity()
-		
+
+def test_cant_make_dupe():
+	lib = TagLibrary(None)
+	tag = lib.create("tagggg")
+	
+	with pytest.raises(TagIntegrityError):
+		tag = lib.create("tagggg")
+	
+	lib.validate_integrity()
+
+def test_cant_get_nothing():
+	lib = TagLibrary(None)
+	
+	with pytest.raises(RuntimeError):
+		tag = lib.get("huh?")
+	
+	lib.validate_integrity()
+
+def test_iter():
+	lib = TagLibrary(None)
+	
+	# Add a variety of tags to test iteration
+	all_tags = [
+		lib.create("tag"),
+		lib.create("tah"),
+		lib.create("tai"),
+		lib.create("tbg"),
+		lib.create("tbh"),
+		lib.create("tcg"),
+		lib.create("sag"),
+		lib.create("sah"),
+		lib.create("sbg")
+	]
+	
+	ret_tags = list(lib)
+	for tag in all_tags:
+		assert tag in ret_tags
+	
+	for tag in ret_tags:
+		assert tag in all_tags
 
 def test_add_recall():
 	lib = TagLibrary(None)
@@ -218,8 +301,19 @@ def test_consequent_migration_no_dupes():
 	assert basket_ball.does_directly_imply(ball)
 
 # Note this doesn't prevent circular implication chains...
-def test_cannot_imply_self():
-	pass # TODO
-
 def test_cannot_imply_alias():
-	pass # TODO
+	lib = TagLibrary(None)
+	
+	ball = lib.create("ball")
+	sphere = lib.create("sphere")
+	
+	sphere.alias(ball)
+	lib.validate_integrity()
+	
+	with pytest.raises(TagIntegrityError):
+		sphere.imply(ball)
+	
+	with pytest.raises(TagIntegrityError):
+		sphere.imply(sphere)
+	
+	lib.validate_integrity()
