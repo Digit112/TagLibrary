@@ -1,8 +1,5 @@
 class TagIntegrityError(RuntimeError):
-	def __init__(self, message, /, *args, **kwargs):
-		super().__init__(message, *args, **kwargs)
-		
-		self.message = message
+	pass
 
 class TagLibrary:
 	def __init__(self, fn):
@@ -34,9 +31,6 @@ class TagLibrary:
 			raise RuntimeError(f"Tag '{tag}' already exists.")
 		
 		current_node.tag_id = self.next_id
-		current_node.antecedents = []
-		current_node.implicants = []
-		current_node.consequents = []
 		self.next_id += 1
 		
 		return current_node
@@ -107,16 +101,12 @@ class TagNode:
 		if self.tag_id is None or other.tag_id is None:
 			raise TagIntegrityError("Cannot alias node without tag_id.")
 		
-		print(f"Alias {self.tag_id} -> {other.tag_id}")
-		
-		if self.canonical is None and len(self.antecedents) == 0:
+		if self.canonical is None:
 			self.canonical = other.get_canon()
-			other.antecedents.append(self)
 			self.canonize_implications()
 		
-		elif other.canonical is None and len(other.antecedents) == 0:
+		elif other.canonical is None:
 			other.canonical = self.get_canon()
-			self.antecedents.append(other)
 			other.canonize_implications()
 		
 		else:
@@ -127,11 +117,10 @@ class TagNode:
 	def imply(self, other):
 		self_canon = self.get_canon()
 		other_canon = other.get_canon()
-		print(f"Imply {self.tag_id} (= {self_canon.tag_id}) -> {other.tag_id} (= {other_canon.tag_id})")
 		
 		if not self_canon.does_imply(other_canon):
-			self_canon.consequents.append(other)
-			other_canon.implicants.append(self_canon)
+			self.consequents.append(other)
+			other.implicants.append(self)
 			return True
 		
 		else:
@@ -139,15 +128,12 @@ class TagNode:
 	
 	# Returns true of this tag implies the passed tag.
 	def does_imply(self, other):
-		return other.get_canon() in self.get_canon().consequents
+		return other in self.consequents
 	
 	# Move all consequents and implicants to the canonical representation of this tag.
 	# Always called while aliasing two tags together.
 	def canonize_implications(self):
-		print(f"Canonizing implications of {self.tag_id}")
-		
 		for implicant in self.implicants:
-			print(f"  implicant {implicant.tag_id}...")
 			implicant.consequents.remove(self)
 			
 			if self.canonical not in implicant.consequents:
@@ -157,7 +143,6 @@ class TagNode:
 		self.implicants = []
 		
 		for consequent in self.consequents:
-			print(f"  consequent {consequent.tag_id}...")
 			consequent.implicants.remove(self)
 			
 			if self.canonical not in consequent.implicants:
@@ -166,25 +151,17 @@ class TagNode:
 		
 		self.implicants = []
 	
-	def cascade_validate_integrity(self, curr_tag=""):
+	def cascade_validate_integrity(self, curr_tag="")
 		self.validate_internal_integrity()
+		self.validate_referential_integrity()
 		
-		for key in self.children:
-			try:
+		try:
+			for key in self.children:
 				self.children[key].cascade_validate_integrity(curr_tag + chr(key))
 		
-			except TagIntegrityError as e:
-				raise RuntimeError(f"While validating '{curr_tag + chr(key)}': {e.message}")
-		
-		self.validate_referential_integrity()
-	
-	def __repr__(self):
-		if self.tag_id is None:
-			return "<Empty TagNode>"
-		
-		else:
-			return f"<Tag ID {self.tag_id}; canonical ID {self.get_canon().tag_id}; {len(self.antecedents)} antecedents; {len(self.implicants)} implicants; {len(self.consequents)} consequents>"
-	
+		except TagIntegrityError as e:
+			raise RuntimeError(f"While validating '{curr_tag}': {e.message}")
+				
 	# Throws if basic assumptions about the values and types of this structure do not hold true.
 	def validate_internal_integrity(self):
 		# Check children
@@ -253,40 +230,39 @@ class TagNode:
 	# Throws under various conditions where the canon of this tag is invalid.
 	# Includes the presence of alias chains and incorrectly canonized consequents (implication relations pointing to a non-canoonical form)
 	def validate_referential_integrity(self):
-		if self.tag_id is not None:
-			# Check canonical / alias integrity
-			if self.canonical is not None:
-				if self.canonical.canonical is not None:
-					raise TagIntegrityError(f"Alias chain {self.tag_id} -> {self.canonical.tag_id} -> {self.canonical.tag_id}")
-				
-				if self not in self.canonical.antecedents:
-					raise TagIntegrityError(f"Tag {self.tag_id} is not in the antecedents of its canonical form.")
-		
-				if len(self.consequents) != 0:
-					raise TagIntegrityError(f"Tag {self.tag_id} must not have any consequents since it is not in canonical form.")
-		
-				if len(self.implicants) != 0:
-					raise TagIntegrityError(f"Tag {self.tag_id} must not have any implicants since it is not in canonical form.")
+		# Check canonical / alias integrity
+		if self.canonical is not None:
+			if self.canonical.canonical is not None:
+				raise TagIntegrityError(f"Alias chain {self.tag_id} -> {self.canonical.tag_id} -> {self.canonical.tag_id}")
 			
-			else:
-				# Check members of arrays.
-				for antecedent in self.antecedents:
-					if antecedent.canonical != self:
-						raise TagIntegrityError(f"Tag {self.tag_id} has antecedent {antecedent.tag_id} whose canonical form is {antecedent.canonoical.tag_id} instead of self.")
+			if self not in self.canonical.antecedents:
+				raise TagIntegrityError(f"Tag {self.tag_id} is not in the antecedents of its canonical form.")
+	
+			if len(self.consequents) != 0:
+				raise TagIntegrityError(f"Tag {self.tag_id} must not have any consequents since it is not in canonical form.")
+	
+			if len(self.implicants) != 0:
+				raise TagIntegrityError(f"Tag {self.tag_id} must not have any implicants since it is not in canonical form.")
+		
+		else:
+			# Check members of arrays.
+			for antecedent in self.antecedents:
+				if antecedent.canonical != self:
+					raise TagIntegrityError(f"Tag {self.tag_id} has antecedent {antecedent.tag_id} whose canonical form is {antecedent.canonoical.tag_id} instead of self.")
+			
+			for consequent in self.consequents:
+				if consequent.implicants is None:
+					raise TagIntegrityError(f"Tag {self.tag_id} has consequent {consequent.tag_id} with no implicants.")
 				
-				for consequent in self.consequents:
-					if consequent.implicants is None:
-						raise TagIntegrityError(f"Tag {self.tag_id} has consequent {consequent.tag_id} with no implicants.")
-					
-					if self not in consequent.implicants:
-						raise TagIntegrityError(f"Tag {self.tag_id} has consequent {consequent.tag_id} for which self is not an implicant.")
+				if self not in consequent.implicants:
+					raise TagIntegrityError(f"Tag {self.tag_id} has consequent {consequent.tag_id} for which self is not an implicant.")
+			
+			for implicant in self.implicants:
+				if implicant.consequents is None:
+					raise TagIntegrityError(f"Tag {self.tag_id} has implicant {implicant.tag_id} with no consequents.")
 				
-				for implicant in self.implicants:
-					if implicant.consequents is None:
-						raise TagIntegrityError(f"Tag {self.tag_id} has implicant {implicant.tag_id} with no consequents.")
-					
-					if self not in implicant.consequents:
-						raise TagIntegrityError(f"Tag {self.tag_id} has implicant {consequent.tag_id} for which self is not a consequent.")
+				if self not in implicant.consequents:
+					raise TagIntegrityError(f"Tag {self.tag_id} has implicant {consequent.tag_id} for which self is not a consequent.")
 			
 			
 
