@@ -121,7 +121,7 @@ class TagExpression:
 						raise TagExpressionParsingError("Expected operator before unary operator.", expr_str, start, end, oper_i)
 				
 				sub_expr = TagExpression(expr_str, oper_i + len(oper.symbol), sub_expr_end_i, depth+1)
-				self.root = sub_expr.root
+				self.root = oper(sub_expr.root)
 			
 			elif issubclass(oper, TagBinaryOperator):
 				left_expr = TagExpression(expr_str, sub_expr_start_i, oper_i, depth+1)
@@ -134,7 +134,10 @@ class TagExpression:
 	
 	# Returns the type and position of the lowest-priority operator in the passeed string segment.
 	# Also throws on mismatched parentheses.
-	def get_lowest_precedence_operator(expr_str, start, end):
+	def get_lowest_precedence_operator(expr_str, start=0, end=None):
+		if end is None:
+			end = len(expr_str)
+		
 		# Find the last occurence of an operator in the outermost parenthetical.
 		# This operator has the lowest precedence. It splits the entire expression in half.
 		close_parens_i = [] # parenthetical depth tracking
@@ -214,6 +217,10 @@ class TagExpression:
 		
 		if len(close_parens_i) > 0:
 			raise TagExpressionParsingError("Unmatched close parenthesis.", expr_str, start, end, close_parens_i[-1])
+		
+		if do_set_sub_expr_bounds:
+			sub_expr_start_i = start
+			sub_expr_end_i = end
 		
 		assert sub_expr_start_i < sub_expr_end_i
 		assert (min_oper is None) == (oper_i is None)
