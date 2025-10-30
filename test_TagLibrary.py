@@ -26,7 +26,7 @@ def test_tag_validation():
 	lib.validate_integrity()
 	
 	with pytest.raises(ValueError):
-		tag = lib.create("tag\n")
+		tag = lib.create("tag\n!")
 	lib.validate_integrity()
 
 def test_basic_integrity_errors():
