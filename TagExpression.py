@@ -19,7 +19,9 @@ class TagExpressionParsingError(ValueError):
 		super().__init__(msg)
 
 class TagOperator():
-	pass
+	class Associativity(Enum):
+		LEFT_TO_RIGHT = 1
+		RIGHT_TO_LEFT  = 2
 
 class TagUnaryOperator(TagOperator):
 	def __init__(self, right):
@@ -31,21 +33,19 @@ class TagBinaryOperator(TagOperator):
 		self.right = right
 
 class TagConjunction(TagBinaryOperator):
-	pass
+	symbol = "AND"
+	priority = 1
+	associativity = TagOperator.Associativity.LEFT_TO_RIGHT
 
 class TagDisjunction(TagBinaryOperator):
-	pass
+	symbol = "OR"
+	priority = 0
+	associativity = TagOperator.Associativity.LEFT_TO_RIGHT
 
 class TagNegation(TagUnaryOperator):
-	pass
-
-TagNegation.priority = 2
-TagConjunction.priority = 1
-TagDisjunction.priority = 0
-
-TagNegation.symbol = "NOT"
-TagConjunction.symbol = "AND"
-TagDisjunction.symbol = "OR"
+	symbol = "NOT"
+	priority = 2
+	associativity = TagOperator.Associativity.RIGHT_TO_LEFT
 
 TagOperator.operations = (TagDisjunction, TagConjunction, TagNegation)
 
@@ -206,7 +206,12 @@ class TagExpression:
 					# Depth is the same as lowest known operator; accept an operator of lower precedence as the new lowest.
 					for oper in TagOperator.operations:
 						# Don't check for operations of higher precedence than the known lowest.
-						if oper.priority >= min_oper.priority:
+						if oper.priority > min_oper.priority:
+							break
+						
+						# If the operations has the same priority (and depth) as the current known lowest,
+						# accept it IF it has right-to-left evaluation.
+						if oper.priority == min_oper.priority and oper.associativity == TagOperator.Associativity.LEFT_TO_RIGHT:
 							break
 						
 						if expr_str.startswith(oper.symbol, i):

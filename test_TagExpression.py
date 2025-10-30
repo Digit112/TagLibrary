@@ -99,7 +99,7 @@ def test_no_operator():
 	assert sub_expr_start_i == 0
 	assert sub_expr_end_i == 3
 
-def test_correct_operator_ordering():
+def test_operator_ordering():
 	oper, oper_i, sub_expr_start_i, sub_expr_end_i = TagExpression.get_lowest_precedence_operator("NOT a AND a OR a")
 	
 	assert oper is TagDisjunction
@@ -135,7 +135,7 @@ def test_correct_operator_ordering():
 	assert sub_expr_start_i == 0
 	assert sub_expr_end_i == 5
 
-def test_correct_depth_handling():
+def test_depth_handling():
 	oper, oper_i, sub_expr_start_i, sub_expr_end_i = TagExpression.get_lowest_precedence_operator("a AND (a AND (a AND a))")
 	
 	assert oper is TagConjunction
@@ -157,6 +157,84 @@ def test_correct_depth_handling():
 	assert sub_expr_start_i == 3
 	assert sub_expr_end_i == 26
 
+def test_depth_multiple_operators():
+	oper, oper_i, sub_expr_start_i, sub_expr_end_i = TagExpression.get_lowest_precedence_operator("a AND (a OR a)")
+	
+	assert oper is TagConjunction
+	assert oper_i == 2
+	assert sub_expr_start_i == 0
+	assert sub_expr_end_i == 14
+	
+	oper, oper_i, sub_expr_start_i, sub_expr_end_i = TagExpression.get_lowest_precedence_operator("a OR (a AND a)")
+	
+	assert oper is TagDisjunction
+	assert oper_i == 2
+	assert sub_expr_start_i == 0
+	assert sub_expr_end_i == 14
+	
+	oper, oper_i, sub_expr_start_i, sub_expr_end_i = TagExpression.get_lowest_precedence_operator("a OR a AND a")
+	
+	assert oper is TagDisjunction
+	assert oper_i == 2
+	assert sub_expr_start_i == 0
+	assert sub_expr_end_i == 12
+	
+	oper, oper_i, sub_expr_start_i, sub_expr_end_i = TagExpression.get_lowest_precedence_operator("a AND a OR a")
+	
+	assert oper is TagDisjunction
+	assert oper_i == 8
+	assert sub_expr_start_i == 0
+	assert sub_expr_end_i == 12
+	
+	oper, oper_i, sub_expr_start_i, sub_expr_end_i = TagExpression.get_lowest_precedence_operator("(a AND (a OR a))")
+	
+	assert oper is TagConjunction
+	assert oper_i == 3
+	assert sub_expr_start_i == 1
+	assert sub_expr_end_i == 15
+	
+	oper, oper_i, sub_expr_start_i, sub_expr_end_i = TagExpression.get_lowest_precedence_operator("(a OR a AND a)")
+	
+	assert oper is TagDisjunction
+	assert oper_i == 3
+	assert sub_expr_start_i == 1
+	assert sub_expr_end_i == 13
+	
+	oper, oper_i, sub_expr_start_i, sub_expr_end_i = TagExpression.get_lowest_precedence_operator("NOT a AND a")
+	
+	assert oper is TagConjunction
+	assert oper_i == 6
+	assert sub_expr_start_i == 0
+	assert sub_expr_end_i == 11
+	
+	oper, oper_i, sub_expr_start_i, sub_expr_end_i = TagExpression.get_lowest_precedence_operator("NOT (a AND a)")
+	
+	assert oper is TagNegation
+	assert oper_i == 0
+	assert sub_expr_start_i == 0
+	assert sub_expr_end_i == 13
+
+def test_left_right_ordering():
+	oper, oper_i, sub_expr_start_i, sub_expr_end_i = TagExpression.get_lowest_precedence_operator("a AND a AND a")
+	
+	assert oper is TagConjunction
+	assert oper_i == 8
+	assert sub_expr_start_i == 0
+	assert sub_expr_end_i == 13
+	
+	oper, oper_i, sub_expr_start_i, sub_expr_end_i = TagExpression.get_lowest_precedence_operator("a OR a OR a")
+	
+	assert oper is TagDisjunction
+	assert oper_i == 7
+	assert sub_expr_start_i == 0
+	assert sub_expr_end_i == 11
+	
+	oper, oper_i, sub_expr_start_i, sub_expr_end_i = TagExpression.get_lowest_precedence_operator("NOT NOT a")
+	
+	assert oper is TagNegation
+	assert oper_i == 0
+	assert sub_expr_start_i == 0
+	assert sub_expr_end_i == 9
 
 #### Test whole expression parsing ####
 
@@ -178,3 +256,57 @@ def test_single_unary_oper_parsing():
 	
 	assert type(expr.root) is TagNegation
 	assert expr.root.right == "this"
+
+	expr = TagExpression("(NOT this)")
+	
+	assert type(expr.root) is TagNegation
+	assert expr.root.right == "this"
+
+def test_double_negation():
+	expr = TagExpression("NOT NOT this ")
+	
+	assert type(expr.root) is TagNegation
+	assert type(expr.root.right) is TagNegation
+	assert expr.root.right.right == "this"
+
+def test_repeated_operator():
+	expr = TagExpression("this AND that AND stuff AND things")
+	
+	assert type(expr.root) is TagConjunction
+	
+	assert expr.root.right == "things"
+	assert type(expr.root.left) is TagConjunction
+	
+	assert expr.root.left.right == "stuff"
+	assert type(expr.root.left.left) is TagConjunction
+	
+	assert expr.root.left.left.right == "that"
+	assert expr.root.left.left.left == "this"
+	
+	expr = TagExpression("(this AND (that AND (stuff AND things)))")
+	
+	assert type(expr.root) is TagConjunction
+	
+	assert      expr.root.left == "this"
+	assert type(expr.root.right) is TagConjunction
+	
+	assert      expr.root.right.left == "that"
+	assert type(expr.root.right.right) is TagConjunction
+	
+	assert      expr.root.right.right.left == "stuff"
+	assert      expr.root.right.right.right == "things"
+
+def test_unary_binary_mix():
+	expr = TagExpression("this AND NOT that OR NOT (stuff AND things)")
+	
+	assert type(expr.root) is TagDisjunction
+	
+	assert type(expr.root.left) is TagConjunction
+	assert      expr.root.left.left == "this"
+	assert type(expr.root.left.right) is TagNegation
+	assert      expr.root.left.right.right == "that"
+	
+	assert type(expr.root.right) is TagNegation
+	assert type(expr.root.right.right) is TagConjunction
+	assert      expr.root.right.right.left == "stuff"
+	assert      expr.root.right.right.right == "things"
