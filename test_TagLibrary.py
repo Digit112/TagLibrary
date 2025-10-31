@@ -377,3 +377,14 @@ def test_tagify():
 	assert expr.root.left.right is tag2
 	assert expr.root.right.left is tag3
 	assert expr.root.right.right.right is tag4
+
+#### Test library saving and loading ####
+
+def test_save_simple():
+	lib = TagLibrary(None)
+	
+	lib.create("ball")
+	lib.create("ballerina")
+	lib.create("basket")
+	
+	lib.save("out.taglib")

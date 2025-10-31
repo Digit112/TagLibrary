@@ -43,6 +43,9 @@ class TagLibrary:
 	# Create a new tag.
 	# Errors if the tag already exists.
 	def create(self, tag):
+		if self.next_id == 2**32:
+			raise RuntimeError("Tag limit exceeded!")
+		
 		#print(f"Creating {self.next_id}: {tag}.")
 		tag = self.validate_and_normalize(tag)
 		
@@ -136,7 +139,12 @@ class TagLibrary:
 				
 			else:
 				raise TypeError(f"No such operation '{oper}'.")
-		
+	
+	# Saves this library at the passed filename
+	def save(self, fn):
+		with open(fn, "wb") as fout:
+			fout.write(self.next_id.to_bytes(4))
+			self.root.save(fout)
 	
 	def __iter__(self):
 		yield from self.root
@@ -251,6 +259,38 @@ class TagNode:
 				raise RuntimeError(f"While validating '{curr_tag + chr(key)}': {e.message}")
 		
 		self.validate_referential_integrity()
+	
+	# Saves to the passed file
+	def save(self, fout, depth=0):
+		if self.tag_id is None:
+			fout.write(False.to_bytes())
+		
+		else:
+			fout.write(True.to_bytes())
+			fout.write(self.tag_id.to_bytes(4))
+			
+			# Store relations
+			if self.canonical is not None:
+				fout.write(self.canonical.to_bytes(4))
+			else:
+				fout.write((0).to_bytes(4))
+			
+			fout.write(len(self.antecedents).to_bytes(2))
+			for antecedent in self.antecedents:
+				fout.write(antecedent.tag_id.to_bytes(4))
+			
+			fout.write(len(self.implicants).to_bytes(2))
+			for implicant in self.implicants:
+				fout.write(implicant.tag_id.to_bytes(4))
+			
+			fout.write(len(self.consequents).to_bytes(2))
+			for consequent in self.consequents:
+				fout.write(consequent.tag_id.to_bytes(4))
+			
+		fout.write(len(self.children).to_bytes(2))
+		for key in self.children:
+			fout.write(chr(key).encode('utf-8'))
+			self.children[key].save(fout, depth+1)
 	
 	def __iter__(self):
 		if self.tag_id is not None:
