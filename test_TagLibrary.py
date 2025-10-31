@@ -1,6 +1,9 @@
 import pytest
 
-from TagLibrary import TagLibrary, TagIntegrityError
+from TagLibrary import TagLibrary, TagIntegrityError, TagIdentificationError
+from TagExpression import *
+
+#### Test integrity validation ####
 
 def test_self_reference_error():
 	lib = TagLibrary(None)
@@ -86,6 +89,8 @@ def test_dupe_errors():
 		tag2.consequents += con
 		lib.validate_integrity()
 
+#### Test integrity violations caught ####
+
 def test_cant_make_dupe():
 	lib = TagLibrary(None)
 	tag = lib.create("tagggg")
@@ -98,10 +103,30 @@ def test_cant_make_dupe():
 def test_cant_get_nothing():
 	lib = TagLibrary(None)
 	
-	with pytest.raises(RuntimeError):
+	with pytest.raises(TagIdentificationError):
 		tag = lib.get("huh?")
 	
 	lib.validate_integrity()
+
+# Note this doesn't prevent circular implication chains...
+def test_cant_imply_alias():
+	lib = TagLibrary(None)
+	
+	ball = lib.create("ball")
+	sphere = lib.create("sphere")
+	
+	sphere.alias(ball)
+	lib.validate_integrity()
+	
+	with pytest.raises(TagIntegrityError):
+		sphere.imply(ball)
+	
+	with pytest.raises(TagIntegrityError):
+		sphere.imply(sphere)
+	
+	lib.validate_integrity()
+
+#### Test functionality ####
 
 def test_iter():
 	lib = TagLibrary(None)
@@ -300,20 +325,55 @@ def test_consequent_migration_no_dupes():
 	assert basketball.does_directly_imply(sphere)
 	assert basket_ball.does_directly_imply(ball)
 
-# Note this doesn't prevent circular implication chains...
-def test_cannot_imply_alias():
+#### Test tagify errors ####
+
+def test_infinite_tagify():
 	lib = TagLibrary(None)
 	
-	ball = lib.create("ball")
-	sphere = lib.create("sphere")
+	expr = TagExpression("NOT tag")
 	
-	sphere.alias(ball)
-	lib.validate_integrity()
+	assert type(expr.root) is TagNegation
+	expr.root.right = expr.root # Create infinite regress.
 	
-	with pytest.raises(TagIntegrityError):
-		sphere.imply(ball)
+	with pytest.raises(RuntimeError):
+		lib.tagify(expr)
+
+def test_unknown_tags():
+	lib = TagLibrary(None)
 	
-	with pytest.raises(TagIntegrityError):
-		sphere.imply(sphere)
+	expr = TagExpression("uh AND oh")
 	
-	lib.validate_integrity()
+	with pytest.raises(TagIdentificationError):
+		lib.tagify(expr)
+
+#### Test tagify ####
+
+def test_tagify_single_tag():
+	lib = TagLibrary(None)
+	tag = lib.create("tag")
+	expr = TagExpression("tag")
+	
+	lib.tagify(expr)
+	
+	assert expr.root is tag
+
+def test_tagify():
+	lib = TagLibrary(None)
+	tag1 = lib.create("tag1")
+	tag2 = lib.create("tag2")
+	tag3 = lib.create("tag3")
+	tag4 = lib.create("tag4")
+	
+	expr = TagExpression("tag1 AND tag2 OR tag3 AND NOT tag4")
+	
+	lib.tagify(expr)
+	
+	assert type(expr.root) is TagDisjunction
+	assert type(expr.root.left) is TagConjunction
+	assert type(expr.root.right) is TagConjunction
+	assert type(expr.root.right.right) is TagNegation
+	
+	assert expr.root.left.left is tag1
+	assert expr.root.left.right is tag2
+	assert expr.root.right.left is tag3
+	assert expr.root.right.right.right is tag4

@@ -1,10 +1,15 @@
 import unicodedata
 
+from TagExpression import *
+
 class TagIntegrityError(RuntimeError):
 	def __init__(self, message, /, *args, **kwargs):
 		super().__init__(message, *args, **kwargs)
 		
 		self.message = message
+
+class TagIdentificationError(ValueError):
+	pass
 
 class TagLibrary:
 	def __init__(self, fn):
@@ -38,6 +43,7 @@ class TagLibrary:
 	# Create a new tag.
 	# Errors if the tag already exists.
 	def create(self, tag):
+		#print(f"Creating {self.next_id}: {tag}.")
 		tag = self.validate_and_normalize(tag)
 		
 		current_node = self.root
@@ -80,9 +86,6 @@ class TagLibrary:
 		if current_node.tag_id is None:
 			return None
 		
-		current_node.tag_id = self.next_id
-		self.next_id += 1
-		
 		return current_node
 	
 	# Returns the node for the requested tag.
@@ -90,9 +93,50 @@ class TagLibrary:
 	def get(self, tag):
 		res = self.has(tag)
 		if res is None:
-			raise TagIntegrityError(f"No such tag '{tag}'.")
+			raise TagIdentificationError(f"No such tag '{tag}'.")
 		
 		return res
+	
+	# Takes a TagExpression and converts all the leaf nodes into TagNode instances.
+	# Throws TagIdentificationError if one of those tags does not exist.
+	def tagify(self, tag_expr):
+		if type(tag_expr.root) is str:
+			tag_expr.root = self.get(tag_expr.root)
+			return
+		
+		opers_stack = [tag_expr.root]
+		num_iters = 0
+		while len(opers_stack) > 0:
+			num_iters += 1
+			if num_iters >= 10000: # Infinite iteration is possible if a TagOperation is (somehow) its own descendant.
+				raise RuntimeError(f"Max TagExpression complexity ({num_iters} operations) exceeded. Infinite loop?")
+			
+			oper = opers_stack.pop()
+			print(f"On {oper}...")
+			
+			if isinstance(oper, TagUnaryOperator):
+				if type(oper.right) is str:
+					oper.right = self.get(oper.right)
+				
+				else:
+					opers_stack.append(oper.right)
+			
+			elif isinstance(oper, TagBinaryOperator):
+				if type(oper.right) is str:
+					oper.right = self.get(oper.right)
+				
+				else:
+					opers_stack.append(oper.right)
+				
+				if type(oper.left) is str:
+					oper.left = self.get(oper.left)
+				
+				else:
+					opers_stack.append(oper.left)
+				
+			else:
+				raise TypeError(f"No such operation '{oper}'.")
+		
 	
 	def __iter__(self):
 		yield from self.root
