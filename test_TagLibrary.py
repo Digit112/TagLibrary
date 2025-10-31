@@ -390,3 +390,6 @@ def test_save_simple():
 	lib.save("test_save_simple.taglib")
 	
 	new_lib = TagLibrary("test_save_simple.taglib")
+	
+	new_lib.validate_integrity()
+	TagLibrary.validate_identical(lib, new_lib)
