@@ -174,6 +174,24 @@ class TagLibrary:
 		
 		elif fmt == "CSV":
 			raise NotImplementedError()
+		
+		# Convert all integer relations to TagNodes
+		all_tags = [None] * self.next_id
+		for tag in self:
+			all_tags[tag.tag_id] = tag
+		
+		for tag in self:
+			if tag.canonical is not None:
+				tag.canonical = all_tags[tag.canonical]
+			
+			for antecedent_i in range(len(tag.antecedents)):
+				tag.antecedents[antecedent_i] = all_tags[tag.antecedents[antecedent_i]]
+			
+			for implicant_i in range(len(tag.implicants)):
+				tag.implicants[implicant_i] = all_tags[tag.implicants[implicant_i]]
+			
+			for consequent_i in range(len(tag.consequents)):
+				tag.consequents[consequent_i] = all_tags[tag.consequents[consequent_i]]
 	
 	def __iter__(self):
 		yield from self.root
@@ -316,7 +334,7 @@ class TagNode:
 			
 			# Store relations
 			if self.canonical is not None:
-				fout.write(self.canonical.to_bytes(4))
+				fout.write(self.canonical.tag_id.to_bytes(4))
 			else:
 				fout.write((0).to_bytes(4))
 			

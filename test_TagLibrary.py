@@ -162,6 +162,15 @@ def test_add_recall():
 	assert tag1 is tag2
 	lib.validate_integrity()
 
+def test_has():
+	lib = TagLibrary(None)
+	bleh = lib.create("bleh")
+	
+	lib.validate_integrity()
+	assert lib.has("blah") is None
+	assert lib.has("bl") is None
+	assert lib.has("bleh") is bleh
+
 def test_alias():
 	lib = TagLibrary(None)
 	
@@ -388,8 +397,59 @@ def test_save_simple():
 	lib.create("basket")
 	
 	lib.save("test_save_simple.taglib")
-	
 	new_lib = TagLibrary("test_save_simple.taglib")
+	
+	new_lib.validate_integrity()
+	TagLibrary.validate_identical(lib, new_lib)
+
+def test_save_aliases():
+	lib = TagLibrary(None)
+	
+	tag1 = lib.create("8bit")
+	tag2 = lib.create("8-bit")
+	tag3 = lib.create("8 bit")
+	tag1.alias(tag2)
+	tag3.alias(tag2)
+	
+	tag4 = lib.create("fast")
+	tag5 = lib.create("quick")
+	tag4.alias(tag5)
+	
+	lib.save("test_save_aliases.taglib")
+	new_lib = TagLibrary("test_save_aliases.taglib")
+	
+	new_lib.validate_integrity()
+	TagLibrary.validate_identical(lib, new_lib)
+
+def test_save_implications():
+	lib = TagLibrary(None)
+	
+	basketball = lib.create("basketball")
+	ball = lib.create("ball")
+	sports = lib.create("sports")
+	basketball.imply(ball)
+	basketball.imply(sports)
+	
+	lib.save("test_save_implications.taglib")
+	new_lib = TagLibrary("test_save_implications.taglib")
+	
+	new_lib.validate_integrity()
+	TagLibrary.validate_identical(lib, new_lib)
+
+def test_save_aliases_implications():
+	lib = TagLibrary(None)
+	
+	basketball = lib.create("basketball")
+	ball = lib.create("ball")
+	sphere = lib.create("sphere")
+	sports = lib.create("sports")
+	
+	basketball.imply(ball)
+	ball.alias(sphere)
+	basketball.imply(sports)
+	
+	lib.save("test_save_aliases_implications.taglib")
+	new_lib = TagLibrary("test_save_aliases_implications.taglib")
 	
 	new_lib.validate_integrity()
 	TagLibrary.validate_identical(lib, new_lib)
