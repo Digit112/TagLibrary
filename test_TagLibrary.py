@@ -387,4 +387,6 @@ def test_save_simple():
 	lib.create("ballerina")
 	lib.create("basket")
 	
-	lib.save("out.taglib")
+	lib.save("test_save_simple.taglib")
+	
+	new_lib = TagLibrary("test_save_simple.taglib")
