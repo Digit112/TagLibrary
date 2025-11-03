@@ -12,15 +12,210 @@ class TagIntegrityError(RuntimeError):
 class TagIdentificationError(ValueError):
 	pass
 
-# Used only during tests. Thrown only by validate_identical()
-class TagLibraryEqualityError(RuntimeError):
-	def __init__(self, message, /, *args, **kwargs):
-		super().__init__(message, *args, **kwargs)
+class TagLibrary:
+	def __init__(self, fn):
+		self.root = TagNode()
+		self.next_id = 1
 		
-		self.message = message
+		if fn is None:
+			return
+		
+		else:
+			self.load(fn)
+	
+	# Returns a lowercase, unicode-normalized version of the string.
+	# Throws on invalid tags such as those containing the comma, parentheses, control, or non-printing characters.
+	def validate_and_normalize(self, tag):
+		tag = unicodedata.normalize("NFKC", tag.strip().lower())
+		
+		for letter in tag:
+			if unicodedata.category(letter) in ["Zl", "Zp", "Cc", "Cf", "Cs", "Co", "Cn"]:
+				raise ValueError("Tag name must not include control or formatting unicode characters.")
+			
+			if letter == ',':
+				raise ValueError("Tag name must not include the comma.")
+			
+			if letter in ['(', ')']:
+				raise ValueError("Tag name must not include parentheses.")
+		
+		return tag
+	
+	# Create a new tag.
+	# Errors if the tag already exists.
+	def create(self, tag):
+		if self.next_id == 2**32:
+			raise RuntimeError("Tag limit exceeded!")
+		
+		#print(f"Creating {self.next_id}: {tag}.")
+		tag = self.validate_and_normalize(tag)
+		
+		current_node = self.root
+		cursor_i = 0
+		
+		while cursor_i < len(tag):
+			codepoint = ord(tag[cursor_i])
+			if codepoint not in current_node.children:
+				current_node.children[codepoint] = TagNode()
+			
+			current_node = current_node.children[codepoint]
+			cursor_i += 1
+			
+		if current_node.tag_id is not None:
+			raise TagIntegrityError(f"Tag '{tag}' already exists.")
+		
+		current_node.tag_id = self.next_id
+		current_node.antecedents = []
+		current_node.implicants = []
+		current_node.consequents = []
+		self.next_id += 1
+		
+		return current_node
+	
+	# Returns the node for the requested tag if it exists, or None if it doesn't
+	def has(self, tag):
+		tag = self.validate_and_normalize(tag)
+		
+		current_node = self.root
+		cursor_i = 0
+		
+		while cursor_i < len(tag):
+			codepoint = ord(tag[cursor_i])
+			if codepoint not in current_node.children:
+				return None
+			
+			current_node = current_node.children[codepoint]
+			cursor_i += 1
+
+		if current_node.tag_id is None:
+			return None
+		
+		return current_node
+	
+	# Returns the node for the requested tag.
+	# Throws if the tag does not exist.
+	def get(self, tag):
+		res = self.has(tag)
+		if res is None:
+			raise TagIdentificationError(f"No such tag '{tag}'.")
+		
+		return res
+	
+	# Takes a TagExpression and converts all the leaf nodes into TagNode instances.
+	# Throws TagIdentificationError if one of those tags does not exist.
+	def tagify(self, tag_expr):
+		if type(tag_expr.root) is str:
+			tag_expr.root = self.get(tag_expr.root)
+			return
+		
+		opers_stack = [tag_expr.root]
+		num_iters = 0
+		while len(opers_stack) > 0:
+			num_iters += 1
+			if num_iters >= 10000: # Infinite iteration is possible if a TagOperation is (somehow) its own descendant.
+				raise RuntimeError(f"Max TagExpression complexity ({num_iters} operations) exceeded. Infinite loop?")
+			
+			oper = opers_stack.pop()
+			print(f"On {oper}...")
+			
+			if isinstance(oper, TagUnaryOperator):
+				if type(oper.right) is str:
+					oper.right = self.get(oper.right)
+				
+				else:
+					opers_stack.append(oper.right)
+			
+			elif isinstance(oper, TagBinaryOperator):
+				if type(oper.right) is str:
+					oper.right = self.get(oper.right)
+				
+				else:
+					opers_stack.append(oper.right)
+				
+				if type(oper.left) is str:
+					oper.left = self.get(oper.left)
+				
+				else:
+					opers_stack.append(oper.left)
+				
+			else:
+				raise TypeError(f"No such operation '{oper}'.")
+	
+	# Saves this library at the passed filename
+	def save(self, fn, fmt="TAGLIB"):
+		if fmt not in ["CSV", "TAGLIB"]:
+			raise RuntimeError(f"Unknown TagLibrary format '{fmt}', must be one of 'CSV', 'TAGLIB'.")
+			
+		with open(fn, "wb") as fout:
+			if fmt == "TAGLIB":
+				fout.write(self.next_id.to_bytes(4))
+			
+			elif fmt == "CSV":
+				raise NotImplementedError()
+			
+			self.root.save(fout)
+	
+	def load(self, fn_or_fin, fmt="TAGLIB"):
+		# Call slef with context manager.
+		if type(fn_or_fin) is str:
+			with open(fn_or_fin, "rb") as fin:
+				return self.load(fin, fmt)
+		
+		if fmt not in ["CSV", "TAGLIB"]:
+			raise RuntimeError(f"Unknown TagLibrary format '{fmt}', must be one of 'CSV', 'TAGLIB'.")
+		
+		if type(fn_or_fin) is not io.BufferedReader:
+			raise TypeError("load() must receive an open file or filename as a string.")
+		
+		fin = fn_or_fin
+		
+		if fmt == "TAGLIB":
+			self.next_id = int.from_bytes(fin.read(4))
+			self.root = TagNode(fin)
+		
+		elif fmt == "CSV":
+			raise NotImplementedError()
+		
+		# Convert all integer relations to TagNodes
+		all_tags = [None] * self.next_id
+		for tag in self:
+			all_tags[tag.tag_id] = tag
+		
+		for tag in self:
+			if tag.canonical is not None:
+				tag.canonical = all_tags[tag.canonical]
+			
+			for antecedent_i in range(len(tag.antecedents)):
+				tag.antecedents[antecedent_i] = all_tags[tag.antecedents[antecedent_i]]
+			
+			for implicant_i in range(len(tag.implicants)):
+				tag.implicants[implicant_i] = all_tags[tag.implicants[implicant_i]]
+			
+			for consequent_i in range(len(tag.consequents)):
+				tag.consequents[consequent_i] = all_tags[tag.consequents[consequent_i]]
+	
+	def __iter__(self):
+		yield from self.root
+	
+	# Checks all the types and inter-relationships between all the tags!
+	# A slow function used only for testing.
+	def validate_integrity(self):
+		self.root.cascade_validate_integrity()
+	
+	# Used during testing to validate save/load functionality.
+	# Throws if passed two libraries which aren't the same.
+	def validate_identical(a, b):
+		if type(a) is not TagLibrary:
+			raise RuntimeError(f"are_identical accepts only libraries, not {type(a)}.")
+		if type(b) is not TagLibrary:
+			raise RuntimeError(f"are_identical accepts only libraries, not {type(b)}.")
+		
+		if a.next_id != b.next_id:
+			raise RuntimeError(f"next_id does not match. ({a.next_id} == {b.next_id})")
+		
+		TagNode.validate_identical(a.root, b.root)
 
 class TagNode:
-	def init_tagnode(self, fin=None):
+	def __init__(self, fin=None):
 		self.tag_id = None
 		
 		# All aliased tags have a single canonical form.
@@ -36,7 +231,7 @@ class TagNode:
 		self.children = {}
 		
 		if fin is not None:
-			self.load(fin, node=type(self))
+			self.load(fin)
 	
 	# Returns the canonical representation of this tag.
 	# Either self, or self's canonical. If a chain of aliases is found, throws a TagIntegrityError.
@@ -68,27 +263,6 @@ class TagNode:
 		else:
 			raise TagIntegrityError(f"Can not alias tags '{self.tag_id}' and '{other.tag_id}' which belong to separate alias groups.")
 	
-	# Sets this tag as the canonical representation of itself and all its aliases.
-	def canonize(self):
-		canon = self.get_canon()
-		
-		if canon is not self:
-			self.antecedents = canon.antecedents
-			self.implicants = canon.implicants
-			self.consequents = canon.consequents
-			
-			canon.antecedents = []
-			canon.implicants = []
-			canon.consequents = []
-			
-			canon.canonical = self
-			self.canonical = None
-			
-			return True
-			
-		else:
-			return False
-	
 	# Sets self to imply the passed tag.
 	# Returns true on success, false if the implication relation already exists.
 	def imply(self, other):
@@ -115,10 +289,10 @@ class TagNode:
 	# Move all consequents and implicants to the canonical representation of this tag.
 	# Always called while aliasing two tags together.
 	def canonize_implications(self):
-		# print(f"Canonizing implications of {self.tag_id}")
+		print(f"Canonizing implications of {self.tag_id}")
 		
 		for implicant in self.implicants:
-			# print(f"  implicant {implicant.tag_id}...")
+			print(f"  implicant {implicant.tag_id}...")
 			implicant.consequents.remove(self)
 			
 			if self.canonical not in implicant.consequents:
@@ -128,7 +302,7 @@ class TagNode:
 		self.implicants = []
 		
 		for consequent in self.consequents:
-			# print(f"  consequent {consequent.tag_id}...")
+			print(f"  consequent {consequent.tag_id}...")
 			consequent.implicants.remove(self)
 			
 			if self.canonical not in consequent.implicants:
@@ -181,13 +355,7 @@ class TagNode:
 			fout.write(chr(key).encode('utf-8'))
 			self.children[key].save(fout)
 	
-	def load(self, fn_or_fin, node, depth=0):
-		if type(fn_or_fin) is str:
-			with open(fn_or_fin, "rb") as fin:
-				return self.load(fin, node, depth)
-		
-		fin = fn_or_fin
-		
+	def load(self, fin, depth=0):
 		if self.tag_id is not None:
 			raise RuntimeError("Cannot load an initialized tag!")
 		
@@ -231,7 +399,6 @@ class TagNode:
 			key = None
 			for i in range(4):
 				unicode_bytes += fin.read(1)
-				print(unicode_bytes)
 				
 				try:
 					key = ord(unicode_bytes.decode("utf-8"))
@@ -243,8 +410,7 @@ class TagNode:
 			if key is None:
 				raise UnicodeDecodeError("Failed to read codepoint.")
 			
-			self.children[key] = node()
-			self.children[key].init_tagnode(fin)
+			self.children[key] = TagNode(fin)
 		
 	def __iter__(self):
 		if self.tag_id is not None:
@@ -262,17 +428,17 @@ class TagNode:
 
 	# Used during testing to validate save/load functionality.
 	def validate_identical(a, b, curr_tag=""):
-		if not isinstance(a, TagNode):
-			raise TagLibraryEqualityError(f"are_identical accepts only nodes, not {type(a)}.")
-		if not isinstance(b, TagNode):
-			raise TagLibraryEqualityError(f"are_identical accepts only nodes, not {type(b)}.")
+		if type(a) is not TagNode:
+			raise RuntimeError(f"are_identical accepts only nodes, not {type(a)}.")
+		if type(b) is not TagNode:
+			raise RuntimeError(f"are_identical accepts only nodes, not {type(b)}.")
 		
 		if a.tag_id != b.tag_id:
-			raise TagLibraryEqualityError(f"While checking {curr_tag}, tag_ids do not match. ({a.tag_id} == {b.tag_id})")
+			raise RuntimeError(f"While checking {curr_tag}, tag_ids do not match. ({a.tag_id} == {b.tag_id})")
 		
 		if a.tag_id is not None:
 			if (a.canonical is None) != (b.canonical is None) or (a.canonical is not None and a.canonical.tag_id != b.canonical.tag_id):
-				raise TagLibraryEqualityError(f"While checking {curr_tag}, canonical forms do not match. ({a.canonical} == {b.canonica})")
+				raise RuntimeError(f"While checking {curr_tag}, canonical forms do not match. ({a.canonical} == {b.canonica})")
 			
 			# A kind of array equality check which does not mandate a specific order.
 			# Check antecedents...
@@ -284,7 +450,7 @@ class TagNode:
 						break
 				
 				if not found_equ:
-					raise TagLibraryEqualityError(f"While checking {curr_tag}, right antecedents lack {a_val}, present in left antecedents.")
+					raise RuntimeError(f"While checking {curr_tag}, right antecedents lack {a_val}, present in left antecedents.")
 				
 			for b_val in b.antecedents:
 				found_equ = False
@@ -294,7 +460,7 @@ class TagNode:
 						break
 				
 				if not found_equ:
-					raise TagLibraryEqualityError(f"While checking {curr_tag}, left antecedents lack {b_val}, present in right antecedents.")
+					raise RuntimeError(f"While checking {curr_tag}, left antecedents lack {b_val}, present in right antecedents.")
 					
 			# Check implicants...
 			for a_val in a.implicants:
@@ -305,7 +471,7 @@ class TagNode:
 						break
 				
 				if not found_equ:
-					raise TagLibraryEqualityError(f"While checking {curr_tag}, right implicants lack {a_val}, present in left implicants.")
+					raise RuntimeError(f"While checking {curr_tag}, right implicants lack {a_val}, present in left implicants.")
 				
 			for b_val in b.implicants:
 				found_equ = False
@@ -315,7 +481,7 @@ class TagNode:
 						break
 				
 				if not found_equ:
-					raise TagLibraryEqualityError(f"While checking {curr_tag}, left implicants lack {b_val}, present in right implicants.")
+					raise RuntimeError(f"While checking {curr_tag}, left implicants lack {b_val}, present in right implicants.")
 					
 			# Check consequents...
 			for a_val in a.consequents:
@@ -326,7 +492,7 @@ class TagNode:
 						break
 				
 				if not found_equ:
-					raise TagLibraryEqualityError(f"While checking {curr_tag}, right consequents lack {a_val}, present in left consequents.")
+					raise RuntimeError(f"While checking {curr_tag}, right consequents lack {a_val}, present in left consequents.")
 				
 			for b_val in b.consequents:
 				found_equ = False
@@ -336,16 +502,16 @@ class TagNode:
 						break
 				
 				if not found_equ:
-					raise TagLibraryEqualityError(f"While checking {curr_tag}, left consequents lack {b_val}, present in right consequents.")
+					raise RuntimeError(f"While checking {curr_tag}, left consequents lack {b_val}, present in right consequents.")
 		
 		# Check children
 		for key in b.children:
 			if key not in a.children:
-				raise TagLibraryEqualityError(f"While checking {curr_tag}, left children lacks key {key}, present in right children.")
+				raise RuntimeError(f"While checking {curr_tag}, left children lacks key {key}, present in right children.")
 		
 		for key in a.children:
 			if key not in b.children:
-				raise TagLibraryEqualityError(f"While checking {curr_tag}, right children lacks key {key}, present in left children.")
+				raise RuntimeError(f"While checking {curr_tag}, right children lacks key {key}, present in left children.")
 			
 			# Recurse
 			TagNode.validate_identical(a.children[key], b.children[key], curr_tag + chr(key))
@@ -471,210 +637,3 @@ class TagNode:
 					for j in range(i+1, len(self.implicants)):
 						if self.implicants[i] == self.implicants[j]:
 							raise TagIntegrityError(f"Tag {self.tag_id} has duplicate implicant {self.implicants[i].tag_id}.")
-
-
-class TagLibrary:
-	def __init__(self, fn, *args, node=TagNode, fmt="TAGLIB", **kwargs):
-		self.node = node
-		self.root = node(*args, **kwargs)
-		self.root.init_tagnode(fn)
-		self.next_id = 1
-		
-		if fn is None:
-			return
-		
-		else:
-			self.load(fn, fmt)
-	
-	# Returns a lowercase, unicode-normalized version of the string.
-	# Throws on invalid tags such as those containing the comma, parentheses, control, or non-printing characters.
-	def validate_and_normalize(self, tag):
-		tag = unicodedata.normalize("NFKC", tag.strip().lower())
-		
-		for letter in tag:
-			if unicodedata.category(letter) in ["Zl", "Zp", "Cc", "Cf", "Cs", "Co", "Cn"]:
-				raise ValueError("Tag name must not include control or formatting unicode characters.")
-			
-			if letter == ',':
-				raise ValueError("Tag name must not include the comma.")
-			
-			if letter in ['(', ')']:
-				raise ValueError("Tag name must not include parentheses.")
-		
-		return tag
-	
-	# Create a new tag.
-	# Errors if the tag already exists.
-	def create(self, tag):
-		if self.next_id == 2**32:
-			raise RuntimeError("Tag limit exceeded!")
-		
-		#print(f"Creating {self.next_id}: {tag}.")
-		tag = self.validate_and_normalize(tag)
-		
-		current_node = self.root
-		cursor_i = 0
-		
-		while cursor_i < len(tag):
-			codepoint = ord(tag[cursor_i])
-			if codepoint not in current_node.children:
-				current_node.children[codepoint] = self.node()
-				current_node.children[codepoint].init_tagnode()
-			
-			current_node = current_node.children[codepoint]
-			cursor_i += 1
-			
-		if current_node.tag_id is not None:
-			raise TagIntegrityError(f"Tag '{tag}' already exists.")
-		
-		current_node.tag_id = self.next_id
-		current_node.antecedents = []
-		current_node.implicants = []
-		current_node.consequents = []
-		self.next_id += 1
-		
-		return current_node
-	
-	# Returns the node for the requested tag if it exists, or None if it doesn't
-	def has(self, tag):
-		tag = self.validate_and_normalize(tag)
-		
-		current_node = self.root
-		cursor_i = 0
-		
-		while cursor_i < len(tag):
-			codepoint = ord(tag[cursor_i])
-			if codepoint not in current_node.children:
-				return None
-			
-			current_node = current_node.children[codepoint]
-			cursor_i += 1
-
-		if current_node.tag_id is None:
-			return None
-		
-		return current_node
-	
-	# Returns the node for the requested tag.
-	# Throws if the tag does not exist.
-	def get(self, tag):
-		res = self.has(tag)
-		if res is None:
-			raise TagIdentificationError(f"No such tag '{tag}'.")
-		
-		return res
-	
-	# Takes a TagExpression and converts all the leaf nodes into TagNode instances.
-	# Throws TagIdentificationError if one of those tags does not exist.
-	def tagify(self, tag_expr):
-		if type(tag_expr.root) is str:
-			tag_expr.root = self.get(tag_expr.root)
-			return
-		
-		opers_stack = [tag_expr.root]
-		num_iters = 0
-		while len(opers_stack) > 0:
-			num_iters += 1
-			if num_iters >= 10000: # Infinite iteration is possible if a TagOperation is (somehow) its own descendant.
-				raise RuntimeError(f"Max TagExpression complexity ({num_iters} operations) exceeded. Infinite loop?")
-			
-			oper = opers_stack.pop()
-			print(f"On {oper}...")
-			
-			if isinstance(oper, TagUnaryOperator):
-				if type(oper.right) is str:
-					oper.right = self.get(oper.right)
-				
-				else:
-					opers_stack.append(oper.right)
-			
-			elif isinstance(oper, TagBinaryOperator):
-				if type(oper.right) is str:
-					oper.right = self.get(oper.right)
-				
-				else:
-					opers_stack.append(oper.right)
-				
-				if type(oper.left) is str:
-					oper.left = self.get(oper.left)
-				
-				else:
-					opers_stack.append(oper.left)
-				
-			else:
-				raise TypeError(f"No such operation '{oper}'.")
-	
-	# Saves this library at the passed filename
-	def save(self, fn, fmt="TAGLIB"):
-		if fmt not in ["CSV", "TAGLIB"]:
-			raise RuntimeError(f"Unknown TagLibrary format '{fmt}', must be one of 'CSV', 'TAGLIB'.")
-			
-		with open(fn, "wb") as fout:
-			if fmt == "TAGLIB":
-				fout.write(self.next_id.to_bytes(4))
-			
-			elif fmt == "CSV":
-				raise NotImplementedError()
-			
-			self.root.save(fout)
-	
-	def load(self, fn_or_fin, fmt="TAGLIB"):
-		if fmt not in ["CSV", "TAGLIB"]:
-			raise RuntimeError(f"Unknown TagLibrary format '{fmt}', must be one of 'CSV', 'TAGLIB'.")
-		
-		# Call self with context manager.
-		if type(fn_or_fin) is str:
-			with open(fn_or_fin, "rb") as fin:
-				return self.load(fin, fmt)
-		
-		if type(fn_or_fin) is not io.BufferedReader:
-			raise TypeError("load() must receive an open file or filename as a string.")
-		
-		fin = fn_or_fin
-		
-		if fmt == "TAGLIB":
-			self.next_id = int.from_bytes(fin.read(4))
-			self.root = self.node()
-			self.root.init_tagnode(fin)
-		
-		elif fmt == "CSV":
-			raise NotImplementedError()
-		
-		# Convert all integer relations to TagNodes
-		all_tags = [None] * self.next_id
-		for tag in self:
-			all_tags[tag.tag_id] = tag
-		
-		for tag in self:
-			if tag.canonical is not None:
-				tag.canonical = all_tags[tag.canonical]
-			
-			for antecedent_i in range(len(tag.antecedents)):
-				tag.antecedents[antecedent_i] = all_tags[tag.antecedents[antecedent_i]]
-			
-			for implicant_i in range(len(tag.implicants)):
-				tag.implicants[implicant_i] = all_tags[tag.implicants[implicant_i]]
-			
-			for consequent_i in range(len(tag.consequents)):
-				tag.consequents[consequent_i] = all_tags[tag.consequents[consequent_i]]
-	
-	def __iter__(self):
-		yield from self.root
-	
-	# Checks all the types and inter-relationships between all the tags!
-	# A slow function used only for testing.
-	def validate_integrity(self):
-		self.root.cascade_validate_integrity()
-	
-	# Used during testing to validate save/load functionality.
-	# Throws if passed two libraries which aren't the same.
-	def validate_identical(a, b):
-		if type(a) is not TagLibrary:
-			raise TypeError(f"are_identical accepts only libraries, not {type(a)}.")
-		if type(b) is not TagLibrary:
-			raise TypeError(f"are_identical accepts only libraries, not {type(b)}.")
-		
-		if a.next_id != b.next_id:
-			raise TagLibraryEqualityError(f"next_id does not match. ({a.next_id} == {b.next_id})")
-		
-		TagNode.validate_identical(a.root, b.root)
