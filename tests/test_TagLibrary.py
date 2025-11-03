@@ -1,6 +1,6 @@
 import pytest
 
-from TagLibrary import TagLibrary, TagIntegrityError, TagIdentificationError
+from TagLibrary import *
 from TagExpression import *
 
 #### Test integrity validation ####
@@ -88,6 +88,18 @@ def test_dupe_errors():
 	with pytest.raises(RuntimeError):
 		tag2.consequents += con
 		lib.validate_integrity()
+
+def test_invalid_save_load():
+	lib = TagLibrary(None)
+	
+	with pytest.raises(RuntimeError):
+		lib.save("whatever", fmt="not a valid format")
+	
+	with pytest.raises(RuntimeError):
+		TagLibrary("whatever", fmt="not a valid format")
+	
+	with pytest.raises(TypeError):
+		TagLibrary(3)
 
 #### Test integrity violations caught ####
 
@@ -196,6 +208,45 @@ def test_multi_alias():
 	assert sphere.get_canon() is spheroid.get_canon()
 	assert ball.get_canon() is spheroid.get_canon()
 	lib.validate_integrity()
+
+def test_canonize():
+	lib = TagLibrary(None)
+	
+	ball = lib.create("ball")
+	sphere = lib.create("sphere")
+	
+	ball.alias(sphere)
+	
+	assert ball.get_canon() is sphere
+	assert sphere.get_canon() is sphere
+	
+	ball.canonize()
+	lib.validate_integrity()
+	
+	assert ball.get_canon() is ball
+	assert sphere.get_canon() is ball
+
+def test_canonize_with_implications():
+	lib = TagLibrary(None)
+	
+	ball = lib.create("ball")
+	sphere = lib.create("sphere")
+	basketball = lib.create("basketball")
+	shape = lib.create("shape")
+	
+	ball.alias(sphere)
+	sphere.imply(shape)
+	basketball.imply(ball)
+	lib.validate_integrity()
+	
+	assert ball.get_canon() is sphere
+	assert sphere.get_canon() is sphere
+	
+	ball.canonize()
+	lib.validate_integrity()
+	
+	assert ball.get_canon() is ball
+	assert sphere.get_canon() is ball
 
 def test_implication_migration():
 	lib = TagLibrary(None)
@@ -334,6 +385,26 @@ def test_consequent_migration_no_dupes():
 	assert basketball.does_directly_imply(sphere)
 	assert basket_ball.does_directly_imply(ball)
 
+def test_validate_identical():
+	lib_a = TagLibrary(None)
+	lib_b = TagLibrary(None)
+	
+	with pytest.raises(TypeError):
+		TagLibrary.validate_identical(2, lib_b)
+	with pytest.raises(TypeError):
+		TagLibrary.validate_identical(lib_a, 2)
+	
+	TagLibrary.validate_identical(lib_a, lib_b)
+
+def test_validate_identical():
+	lib_a = TagLibrary(None)
+	lib_b = TagLibrary(None)
+	
+	lib_a.create("tag")
+	
+	with pytest.raises(TagLibraryEqualityError):
+		TagLibrary.validate_identical(lib_a, lib_b)
+
 #### Test tagify errors ####
 
 def test_infinite_tagify():
@@ -453,3 +524,12 @@ def test_save_aliases_implications():
 	
 	new_lib.validate_integrity()
 	TagLibrary.validate_identical(lib, new_lib)
+
+#### Custom TagLibrary ####
+
+def test_custom_data():
+	class MyTagNode(TagNode):
+		def __init__(self):
+			super().__init__()
+	
+	lib = TagLibrary(None, node=MyTagNode)

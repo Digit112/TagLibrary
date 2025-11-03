@@ -63,3 +63,11 @@ Make the passed tag an implicant of the calling tag.
 - Replace "next_id" with "num_tags"
 - Errors for adding a 2^16th alias/implication
 - GetAllImplications
+
+### Run
+
+Be sure to try deleting the cache on error.
+
+```
+python -m pytest --cov --cov-report term-missing
+```

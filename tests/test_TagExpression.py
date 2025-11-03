@@ -1,6 +1,7 @@
 import pytest
 
 # TagExpression, TagExpressionParsingError, TagOperator, TagUnaryOperator, TagBinaryOperator, TagConjunction, TagDisjunction, TagNegation
+from TagLibrary import *
 from TagExpression import *
 
 #### Test appropriate error is raised ####
@@ -88,6 +89,16 @@ def test_missing_operand_betwee_operator():
 	
 	with pytest.raises(TagExpressionParsingError):
 		expr = TagExpression("uh AND () AND oh")
+
+def test_non_operation_in_result():
+	expr = TagExpression("NOT tag")
+	
+	assert type(expr.root) is TagNegation
+	expr.root = 3
+	
+	lib = TagLibrary(None)
+	with pytest.raises(TypeError):
+		lib.tagify(expr)
 
 #### Test get_lowest_precedence_operator ####
 
