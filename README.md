@@ -6,21 +6,6 @@ Tag Management is a library for processing tag relationships and queries in an e
 
 Uses a prefix tree to allow rapid lookup of tags by name, including their aliases and implications, and also allows saving and loading tag libraries. Utilities exist to modify these relations, which throw `TagIntegrityError` in the case that the update does not maintain the integrity of the relations. For example, if a tag is added that already exists, or a tag is made to imply itself.
 
-### Subclassing
-
-The TagLibrary uses a prefix tree (trie) internally for linear-time lookup and insertion in the length of the tag. The nodes are instances of the `TagNode` class. To associate additional methods or data with tags, subclass `TagNode` and pass your custom instance to the TagLibrary constructor. Don't forget to call the super constructor if you define your own.
-
-```
-class MyTagNode(TagNode):
-	def __init__(self):
-		super().__init__(self)
-	
-	# Custom stuff...
-
-my_lib = TagLibrary(node=MyTagNode)
-```
-
-
 ## TagExpression
 
 Includes a recursive-descent expression parser, `TagExpression`, which accepts a string in its constructor. The result will have a `root` attribute which is the root of the expression tree with strings for leaves and `TagOperator` instances for internal nodes. Throws `TagExpressionParsingError` on invalid syntax.
