@@ -1,7 +1,7 @@
 import io
 import unicodedata
 
-from TagExpression import *
+from .TagExpression import *
 
 class TagIntegrityError(RuntimeError):
 	def __init__(self, message, /, *args, **kwargs):

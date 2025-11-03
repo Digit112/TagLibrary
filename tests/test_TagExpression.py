@@ -1,7 +1,7 @@
 import pytest
 
 # TagExpression, TagExpressionParsingError, TagOperator, TagUnaryOperator, TagBinaryOperator, TagConjunction, TagDisjunction, TagNegation
-from TagExpression import *
+from TagManagement.TagExpression import *
 
 #### Test appropriate error is raised ####
 
