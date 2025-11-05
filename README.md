@@ -45,6 +45,7 @@ Make the passed tag an implicant of the calling tag.
 ## TODO:
 
 - Deactivate / Delete operation
+- Add IF and IFF implication operators. Rember to update logic for convversion to CNF, which simply reduces these operations before reducing to NNF.
 - Replace "next_id" with "num_tags"
 - Errors for adding a 2^16th alias/implication
 - GetAllImplications

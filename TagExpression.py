@@ -132,6 +132,78 @@ class TagExpression:
 			else:
 				raise RuntimeError(f"Unknown operation {oper}.")
 	
+	# Convert one-way and two-way implication into negation, conjunction, and disjunction operators.
+	def reduce_implications(self):
+		pass # Implement after adding IF and IFF operators.
+	
+	# Convert into negative normal form, applying DeMorgan's laws to ensure all TagNegation operations apply only to primitives.
+	# Reduces any implication operations.
+	def negation_normal_form(self):
+		self.reduce_implications()
+		
+		opers_stack = [self]
+		while len(opers_stack) > 0:
+			oper = opers_stack.pop()
+			
+			# Distribute negation over conjunction/disjunction and eliminate any double negatives.
+			if isinstance(oper, TagUnaryOperator):
+				raise RuntimeError("Should never run on TagNegation. Any other unary operators should have been reduced prior to calling this function.")
+			
+			elif isinstance(oper, TagBinaryOperator):
+				if isinstance(oper.right, TagNegation):
+					if isinstance(oper.right.right, TagNegation):
+						oper.right = oper.right.right.right
+						opers_stack.append(oper)
+					
+					elif isinstance(oper.right.right, TagConjunction):
+						oper.right = TagDisjunction(TagNegation(oper.right.right.left), TagNegation(oper.right.right.right))
+						opers_stack.append(oper.right)
+					
+					elif isinstance(oper.right.right, TagDisjunction):
+						oper.right = TagConjunction(TagNegation(oper.right.right.left), TagNegation(oper.right.right.right))
+						opers_stack.append(oper.right)
+				
+				elif isinstance(oper.right, TagOperator):
+					opers_stack.append(oper.right)
+				
+				if isinstance(oper.left, TagNegation):
+					if isinstance(oper.left.right, TagNegation):
+						oper.left = oper.left.right.right
+						opers_stack.append(oper)
+					
+					elif isinstance(oper.left.right, TagConjunction):
+						oper.left = TagDisjunction(TagNegation(oper.left.right.left), TagNegation(oper.left.right.right))
+						opers_stack.append(oper.left)
+					
+					elif isinstance(oper.left.right, TagDisjunction):
+						oper.left = TagConjunction(TagNegation(oper.left.right.left), TagNegation(oper.left.right.right))
+						opers_stack.append(oper.left)
+				
+				elif isinstance(oper.left, TagOperator):
+					opers_stack.append(oper.left)
+				
+			else:
+				raise RuntimeError()
+	
+	def conjunctive_normal_form():
+		self.negation_normal_form()
+		
+		opers_stack = [self]
+		while len(opers_stack) > 0:
+			oper = opers_stack.pop()
+			
+			# Distribute disjunction over conjunction
+			if isinstance(oper, TagUnaryOperator):
+				raise RuntimeError("Should never run on TagNegation. Any other unary operators should have been reduced prior to calling this function.")
+			
+			elif isinstance(oper, TagBinaryOperator):
+				if isinstance(oper.right, TagDisjunction):
+				
+				else:
+					opers_stack.append(self.
+			
+			
+	
 	# Returns the type and position of the lowest-priority operator in the passeed string segment.
 	# Also throws on mismatched parentheses.
 	def get_lowest_precedence_operator(expr_str, start=0, end=None):
