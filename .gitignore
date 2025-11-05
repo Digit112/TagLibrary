@@ -216,3 +216,5 @@ __marimo__/
 .streamlit/secrets.toml
 
 *.taglib
+*.csv
+load_e621.py

@@ -1,3 +1,4 @@
+import csv
 import io
 import unicodedata
 
@@ -13,7 +14,7 @@ class TagIdentificationError(ValueError):
 	pass
 
 class TagLibrary:
-	def __init__(self, fn):
+	def __init__(self, fn, fmt="TAGLIB", csv_name_col="name"):
 		self.root = TagNode()
 		self.next_id = 1
 		
@@ -21,7 +22,7 @@ class TagLibrary:
 			return
 		
 		else:
-			self.load(fn)
+			self.load(fn, fmt=fmt, csv_name_col=csv_name_col)
 	
 	# Returns a lowercase, unicode-normalized version of the string.
 	# Throws on invalid tags such as those containing the comma, parentheses, control, or non-printing characters.
@@ -30,13 +31,10 @@ class TagLibrary:
 		
 		for letter in tag:
 			if unicodedata.category(letter) in ["Zl", "Zp", "Cc", "Cf", "Cs", "Co", "Cn"]:
-				raise ValueError("Tag name must not include control or formatting unicode characters.")
+				raise ValueError(f"Tag name must not include control or formatting unicode characters such as U+{ord(letter):04X} ({unicodedata.category(letter)}).")
 			
 			if letter == ',':
 				raise ValueError("Tag name must not include the comma.")
-			
-			if letter in ['(', ')']:
-				raise ValueError("Tag name must not include parentheses.")
 		
 		return tag
 	
@@ -154,26 +152,51 @@ class TagLibrary:
 			
 			self.root.save(fout)
 	
-	def load(self, fn_or_fin, fmt="TAGLIB"):
-		# Call slef with context manager.
-		if type(fn_or_fin) is str:
-			with open(fn_or_fin, "rb") as fin:
-				return self.load(fin, fmt)
-		
+	# Load from file. Accepts taglib files as well as CSV files.
+	# In the case of a CSV file, the csv_name_col parameter gives the name of the column to extract tags from.
+	def load(self, fn, fmt="TAGLIB", csv_name_col="name", _fin=None):
 		if fmt not in ["CSV", "TAGLIB"]:
 			raise RuntimeError(f"Unknown TagLibrary format '{fmt}', must be one of 'CSV', 'TAGLIB'.")
 		
-		if type(fn_or_fin) is not io.BufferedReader:
-			raise TypeError("load() must receive an open file or filename as a string.")
+		# Call slef with context manager.
+		if _fin is None:
+			if fmt == "TAGLIB":
+				with open(fn, "rb") as fin:
+					return self.load(fn=None, fmt="TAGLIB", csv_name_col=csv_name_col, _fin=fin)
+			
+			elif fmt == "CSV":
+				with open(fn, "r", newline="") as fin:
+					return self.load(fn=None, fmt="CSV", csv_name_col=csv_name_col, _fin=fin)
+			
+			else:
+				raise RuntimeError("Invalid format.")
 		
-		fin = fn_or_fin
+		fin = _fin
 		
 		if fmt == "TAGLIB":
 			self.next_id = int.from_bytes(fin.read(4))
 			self.root = TagNode(fin)
 		
 		elif fmt == "CSV":
-			raise NotImplementedError()
+			csv_in = csv.DictReader(fin)
+			error_count = 0
+			for row in csv_in:
+				try:
+					new_tag = row[csv_name_col]
+					self.create(new_tag)
+				
+				except ValueError as err:
+					print(f"Failed to create tag '{row[csv_name_col]}'. Got error: {err.args[0]}")
+					error_count += 1
+				
+				except TagIntegrityError as err:
+					print(f"Failed to create tag '{row[csv_name_col]}'. Got error: {err.args[0]}")
+					error_count += 1
+			
+			print(f"Failed to load {error_count} tags.")
+			
+		else:
+			raise RuntimeError("Invalid format.")
 		
 		# Convert all integer relations to TagNodes
 		all_tags = [None] * self.next_id
@@ -349,7 +372,7 @@ class TagNode:
 			fout.write(len(self.consequents).to_bytes(2))
 			for consequent in self.consequents:
 				fout.write(consequent.tag_id.to_bytes(4))
-			
+		
 		fout.write(len(self.children).to_bytes(4))
 		for key in self.children:
 			fout.write(chr(key).encode('utf-8'))
@@ -399,6 +422,8 @@ class TagNode:
 			key = None
 			for i in range(4):
 				unicode_bytes += fin.read(1)
+				if len(unicode_bytes) <= i:
+					raise ValueError("EOF reached unexpectedly!")
 				
 				try:
 					key = ord(unicode_bytes.decode("utf-8"))

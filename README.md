@@ -59,6 +59,7 @@ Make the passed tag an implicant of the calling tag.
 
 ## TODO:
 
+- Allow keys to be multiple characters. This represents an enormous opportunity for progress.
 - Deactivate / Delete operation
 - Replace "next_id" with "num_tags"
 - Errors for adding a 2^16th alias/implication
