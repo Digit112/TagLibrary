@@ -1,7 +1,7 @@
 import pytest
 
-from TagLibrary import TagLibrary, TagIntegrityError, TagIdentificationError
-from TagExpression import *
+from ..TagLibrary import TagLibrary, TagIntegrityError, TagIdentificationError
+from ..TagExpression import *
 
 #### Test integrity validation ####
 
