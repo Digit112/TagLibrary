@@ -14,7 +14,7 @@ def test_self_reference_error():
 		lib.validate_integrity()
 
 def test_tag_validation():
-	lib = TagLibrary(None)
+	lib = TagLibrary(None, disallowed_chars=",()")
 	
 	with pytest.raises(ValueError):
 		tag = lib.create("tag,")

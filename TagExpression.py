@@ -18,34 +18,187 @@ class TagExpressionParsingError(ValueError):
 		
 		super().__init__(msg)
 
+class TagExpressionValidationError(ValueError):
+	def __init__(self, message, offending_tag):
+		super().__init__(message)
+		
+		self.offending_tag = offending_tag
+
 class TagOperator():
 	class Associativity(Enum):
 		LEFT_TO_RIGHT = 1
 		RIGHT_TO_LEFT  = 2
+	
+	# The below operations can be tricky. They will augment themselves and return self if they can, but they may very well return a fresh object instead.
+	
+	# Returns an equivalent (possibl;y self, modified)  of this operator expressed only in terms of TagConjunction, TagDisjunction, and TagNegation
+	def as_reduced(self):
+		raise NotImplementedError("Deriving classes must override as_reduced()")
+	
+	# Returns an equivalent (possibly self, modified) of this expression in negation normal form.
+	# Assumes the tag is already reduced!
+	def as_negation_normal(self):
+		raise NotImplementedError("Deriving classes must override as_negation_normal()")
+	
+	# Returns an equivalent (possibl;y self, modified) of this expression in conjunctive normal form.
+	# Assumes the tag is already in negation normal form!
+	def as_conjunctive_normal(self):
+		raise NotImplementedError("Deriving classes must override as_conjunctive_normal()")
 
 class TagUnaryOperator(TagOperator):
 	def __init__(self, right):
 		self.right = right
+	
+	def validate_is_negation_normal():
+		raise TagExpressionValidationError("Unreduced unary operator.", self)
 
 class TagBinaryOperator(TagOperator):
 	def __init__(self, left, right):
 		self.left = left
 		self.right = right
+	
+	def validate_is_negation_normal():
+		raise TagExpressionValidationError("Unreduced binary operator.", self)
 
 class TagConjunction(TagBinaryOperator):
 	symbol = "AND"
 	priority = 1
 	associativity = TagOperator.Associativity.LEFT_TO_RIGHT
+	
+	def as_reduced(self):
+		if type(self.left) is TagOperator:
+			self.left = self.left.as_reduced()
+			
+		if type(self.right) is TagOperator:
+			self.right = self.right.as_reduced()
+		
+		return self
+	
+	def as_negation_normal(self):
+		if type(self.left) is TagOperator:
+			self.left = self.left.as_negation_normal()
+			
+		if type(self.right) is TagOperator:
+			self.right = self.right.as_negation_normal()
+		
+		return self
+	
+	def as_conjunctive_normal(self):
+		if type(self.left) is TagOperator:
+			self.left = self.left.as_conjunctive_normal()
+			
+		if type(self.right) is TagOperator:
+			self.right = self.right.as_conjunctive_normal()
+		
+		return self
+	
+	def validate_is_negation_normal():
+		if type(self.right) is TagOperator:
+			self.right.validate_is_negation_normal()
+
+		if type(self.left) is TagOperator:
+			self.left.validate_is_negation_normal()
 
 class TagDisjunction(TagBinaryOperator):
 	symbol = "OR"
 	priority = 0
 	associativity = TagOperator.Associativity.LEFT_TO_RIGHT
+	
+	def as_reduced(self):
+		if type(self.left) is TagOperator:
+			self.left = self.left.as_reduced()
+			
+		if type(self.right) is TagOperator:
+			self.right = self.right.as_reduced()
+		
+		return self
+	
+	def as_negation_normal(self):
+		if type(self.left) is TagOperator:
+			self.left = self.left.as_negation_normal()
+			
+		if type(self.right) is TagOperator:
+			self.right = self.right.as_negation_normal()
+		
+		return self
+	
+	def as_conjunctive_normal(self):
+		if type(self.right) is TagOperator:
+			if type(self.right) is not TagConjunction:
+				self.right = self.right.as_conjunctive_normal()
+			
+			# Critical: This "if" cannot be changed to "else" because the prior operation may have converted the child to a TagConjunction
+			if type(self.right) is TagConjunction:
+				return TagConjunction(
+					TagDisjunction(self.left, self.right.left).as_conjunctive_normal(),
+					TagDisjunction(self.left, self.right.right).as_conjunctive_normal()
+				)
+		
+		if type(self.left) is TagOperator:
+			if type(self.left) is not TagConjunction:
+				self.left = self.left.as_conjunctive_normal()
+			
+			# Critical: This "if" cannot be changed to "else" because the prior operation may have converted the child to a TagConjunction
+			if type(self.left) is TagConjunction:
+				return TagConjunction(
+					TagDisjunction(self.left.left, self.right).as_conjunctive_normal(),
+					TagDisjunction(self.left.right, self.right).as_conjunctive_normal()
+				)
+		
+		return self
+	
+	def validate_is_negation_normal():
+		if type(self.right) is TagOperator:
+			self.right.validate_is_negation_normal()
+
+		if type(self.left) is TagOperator:
+			self.left.validate_is_negation_normal()
 
 class TagNegation(TagUnaryOperator):
 	symbol = "NOT"
 	priority = 2
 	associativity = TagOperator.Associativity.RIGHT_TO_LEFT
+	
+	def as_reduced(self):
+		if type(self.right) is TagOperator:
+			self.right = self.right.as_reduced()
+		
+		return self
+	
+	def as_negation_normal(self):
+		if type(self.right) is TagNegation:
+			if type(self.right.right) is TagOperator:
+				return self.right.right.as_negation_normal()
+			
+			else:
+				return self.right.right
+		
+		if type(self.right) is TagConjunction:
+			return TagDisjunction(
+				TagNegation(self.right.left).as_negation_normal(),
+				TagNegation(self.right.right).as_negation_normal()
+			)
+		
+		if type(self.right) is TagDisjunction:
+			return TagConjunction(
+				TagNegation(self.right.left).as_negation_normal(),
+				TagNegation(self.right.right).as_negation_normal()
+			)
+		
+		if isinstance(self.right, TagOperator):
+			raise RuntimeError(f"Must never call as_negation_normal on un-reduced expression containing {type(self.right)}")
+		
+		return self
+		
+	def as_conjunctive_normal(self):
+		if type(self.right) is TagOperator:
+			raise RuntimeError("Must never call as_conjunctive_normal on expression not in negation normal form.")
+		
+		return self
+	
+	def validate_is_negation_normal():
+		if type(self.right) is TagOperator:
+			raise TagExpressionValidationError("Not in NNF", self.right)
 
 TagOperator.operations = (TagDisjunction, TagConjunction, TagNegation)
 
@@ -197,10 +350,29 @@ class TagExpression:
 				raise RuntimeError("Should never run on TagNegation. Any other unary operators should have been reduced prior to calling this function.")
 			
 			elif isinstance(oper, TagBinaryOperator):
+				# Right-distribute
 				if isinstance(oper.right, TagDisjunction):
+					if isinstance(oper.right.right, TagConjunction):
+						oper.right = TagConjunction(TagDisjunction(oper.right.left, oper.right.right.left), TagDisjunction(oper.right.left, oper.right.right.right))
+						opers_stack.append(oper.right)
+				
+				elif isinstance(oper.right, TagConjunction):
+					opers_stack.append(oper.right)
 				
 				else:
-					opers_stack.append(self.
+					raise RuntimeError(f"Unreduced TagOperator {oper.right}")
+			
+				# Left-distribute
+				if isinstance(oper.left, TagDisjunction):
+					if isinstance(oper.left.right, TagConjunction):
+						oper.left = TagConjunction(TagDisjunction(oper.left.right.left, oper.left.left), TagDisjunction(oper.left.right.right, oper.left.left))
+						opers_stack.append(oper.left)
+				
+				elif isinstance(oper.left, TagConjunction):
+					opers_stack.append(oper.left)
+				
+				else:
+					raise RuntimeError(f"Unreduced TagOperator {oper.right}")
 			
 			
 	

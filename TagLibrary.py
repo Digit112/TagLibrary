@@ -14,9 +14,11 @@ class TagIdentificationError(ValueError):
 	pass
 
 class TagLibrary:
-	def __init__(self, fn, fmt="TAGLIB", csv_name_col="name"):
+	def __init__(self, fn, fmt="TAGLIB", disallowed_chars="", csv_name_col="name"):
 		self.root = TagNode()
 		self.next_id = 1
+		
+		self.disallowed_chars = disallowed_chars
 		
 		if fn is None:
 			return
@@ -33,8 +35,8 @@ class TagLibrary:
 			if unicodedata.category(letter) in ["Zl", "Zp", "Cc", "Cf", "Cs", "Co", "Cn"]:
 				raise ValueError(f"Tag name must not include control or formatting unicode characters such as U+{ord(letter):04X} ({unicodedata.category(letter)}).")
 			
-			if letter == ',':
-				raise ValueError("Tag name must not include the comma.")
+			if letter in self.disallowed_chars:
+				raise ValueError(f"Tag name must not include {letter}.")
 		
 		return tag
 	
