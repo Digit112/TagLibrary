@@ -238,6 +238,13 @@ def test_left_right_ordering():
 
 #### Test whole expression parsing ####
 
+def test_tag_only():
+	expr = TagExpression("hello tags!")
+	assert expr.root == "hello tags!"
+	
+	expr = TagExpression("    hello tags!    ")
+	assert expr.root == "hello tags!"
+
 def test_single_binary_oper_parsing():
 	expr = TagExpression("this AND that")
 	

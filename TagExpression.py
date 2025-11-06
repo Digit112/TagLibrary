@@ -49,7 +49,7 @@ class TagUnaryOperator(TagOperator):
 	def __init__(self, right):
 		self.right = right
 	
-	def validate_is_negation_normal():
+	def validate_is_negation_normal(self):
 		raise TagExpressionValidationError("Unreduced unary operator.", self)
 
 class TagBinaryOperator(TagOperator):
@@ -57,7 +57,7 @@ class TagBinaryOperator(TagOperator):
 		self.left = left
 		self.right = right
 	
-	def validate_is_negation_normal():
+	def validate_is_negation_normal(self):
 		raise TagExpressionValidationError("Unreduced binary operator.", self)
 
 class TagConjunction(TagBinaryOperator):
@@ -66,37 +66,37 @@ class TagConjunction(TagBinaryOperator):
 	associativity = TagOperator.Associativity.LEFT_TO_RIGHT
 	
 	def as_reduced(self):
-		if type(self.left) is TagOperator:
+		if isinstance(self.left, TagOperator):
 			self.left = self.left.as_reduced()
 			
-		if type(self.right) is TagOperator:
+		if isinstance(self.right, TagOperator):
 			self.right = self.right.as_reduced()
 		
 		return self
 	
 	def as_negation_normal(self):
-		if type(self.left) is TagOperator:
+		if isinstance(self.left, TagOperator):
 			self.left = self.left.as_negation_normal()
 			
-		if type(self.right) is TagOperator:
+		if isinstance(self.right, TagOperator):
 			self.right = self.right.as_negation_normal()
 		
 		return self
 	
 	def as_conjunctive_normal(self):
-		if type(self.left) is TagOperator:
+		if isinstance(self.left, TagOperator):
 			self.left = self.left.as_conjunctive_normal()
 			
-		if type(self.right) is TagOperator:
+		if isinstance(self.right, TagOperator):
 			self.right = self.right.as_conjunctive_normal()
 		
 		return self
 	
-	def validate_is_negation_normal():
-		if type(self.right) is TagOperator:
+	def validate_is_negation_normal(self):
+		if isinstance(self.right, TagOperator):
 			self.right.validate_is_negation_normal()
 
-		if type(self.left) is TagOperator:
+		if isinstance(self.left, TagOperator):
 			self.left.validate_is_negation_normal()
 
 class TagDisjunction(TagBinaryOperator):
@@ -105,25 +105,25 @@ class TagDisjunction(TagBinaryOperator):
 	associativity = TagOperator.Associativity.LEFT_TO_RIGHT
 	
 	def as_reduced(self):
-		if type(self.left) is TagOperator:
+		if isinstance(self.left, TagOperator):
 			self.left = self.left.as_reduced()
 			
-		if type(self.right) is TagOperator:
+		if isinstance(self.right, TagOperator):
 			self.right = self.right.as_reduced()
 		
 		return self
 	
 	def as_negation_normal(self):
-		if type(self.left) is TagOperator:
+		if isinstance(self.left, TagOperator):
 			self.left = self.left.as_negation_normal()
 			
-		if type(self.right) is TagOperator:
+		if isinstance(self.right, TagOperator):
 			self.right = self.right.as_negation_normal()
 		
 		return self
 	
 	def as_conjunctive_normal(self):
-		if type(self.right) is TagOperator:
+		if isinstance(self.right, TagOperator):
 			if type(self.right) is not TagConjunction:
 				self.right = self.right.as_conjunctive_normal()
 			
@@ -134,7 +134,7 @@ class TagDisjunction(TagBinaryOperator):
 					TagDisjunction(self.left, self.right.right).as_conjunctive_normal()
 				)
 		
-		if type(self.left) is TagOperator:
+		if isinstance(self.left, TagOperator):
 			if type(self.left) is not TagConjunction:
 				self.left = self.left.as_conjunctive_normal()
 			
@@ -147,11 +147,11 @@ class TagDisjunction(TagBinaryOperator):
 		
 		return self
 	
-	def validate_is_negation_normal():
-		if type(self.right) is TagOperator:
+	def validate_is_negation_normal(self):
+		if isinstance(self.right, TagOperator):
 			self.right.validate_is_negation_normal()
 
-		if type(self.left) is TagOperator:
+		if isinstance(self.left, TagOperator):
 			self.left.validate_is_negation_normal()
 
 class TagNegation(TagUnaryOperator):
@@ -160,17 +160,19 @@ class TagNegation(TagUnaryOperator):
 	associativity = TagOperator.Associativity.RIGHT_TO_LEFT
 	
 	def as_reduced(self):
-		if type(self.right) is TagOperator:
+		if isinstance(self.right, TagOperator):
 			self.right = self.right.as_reduced()
 		
 		return self
 	
 	def as_negation_normal(self):
 		if type(self.right) is TagNegation:
-			if type(self.right.right) is TagOperator:
+			if isinstance(self.right.right, TagOperator):
+				print("Recursing...")
 				return self.right.right.as_negation_normal()
 			
 			else:
+				print(f"Returning {self.right.right} as val...")
 				return self.right.right
 		
 		if type(self.right) is TagConjunction:
@@ -191,13 +193,13 @@ class TagNegation(TagUnaryOperator):
 		return self
 		
 	def as_conjunctive_normal(self):
-		if type(self.right) is TagOperator:
+		if isinstance(self.right, TagOperator):
 			raise RuntimeError("Must never call as_conjunctive_normal on expression not in negation normal form.")
 		
 		return self
 	
-	def validate_is_negation_normal():
-		if type(self.right) is TagOperator:
+	def validate_is_negation_normal(self):
+		if isinstance(self.right, TagOperator):
 			raise TagExpressionValidationError("Not in NNF", self.right)
 
 TagOperator.operations = (TagDisjunction, TagConjunction, TagNegation)
@@ -287,56 +289,22 @@ class TagExpression:
 	
 	# Convert one-way and two-way implication into negation, conjunction, and disjunction operators.
 	def reduce_implications(self):
-		pass # Implement after adding IF and IFF operators.
+		if isinstance(self.root, TagOperator):
+			self.root = self.root.as_reduced()
 	
 	# Convert into negative normal form, applying DeMorgan's laws to ensure all TagNegation operations apply only to primitives.
 	# Reduces any implication operations.
-	def negation_normal_form(self):
+	def to_negation_normal_form(self):
 		self.reduce_implications()
-		
-		opers_stack = [self]
-		while len(opers_stack) > 0:
-			oper = opers_stack.pop()
-			
-			# Distribute negation over conjunction/disjunction and eliminate any double negatives.
-			if isinstance(oper, TagUnaryOperator):
-				raise RuntimeError("Should never run on TagNegation. Any other unary operators should have been reduced prior to calling this function.")
-			
-			elif isinstance(oper, TagBinaryOperator):
-				if isinstance(oper.right, TagNegation):
-					if isinstance(oper.right.right, TagNegation):
-						oper.right = oper.right.right.right
-						opers_stack.append(oper)
-					
-					elif isinstance(oper.right.right, TagConjunction):
-						oper.right = TagDisjunction(TagNegation(oper.right.right.left), TagNegation(oper.right.right.right))
-						opers_stack.append(oper.right)
-					
-					elif isinstance(oper.right.right, TagDisjunction):
-						oper.right = TagConjunction(TagNegation(oper.right.right.left), TagNegation(oper.right.right.right))
-						opers_stack.append(oper.right)
-				
-				elif isinstance(oper.right, TagOperator):
-					opers_stack.append(oper.right)
-				
-				if isinstance(oper.left, TagNegation):
-					if isinstance(oper.left.right, TagNegation):
-						oper.left = oper.left.right.right
-						opers_stack.append(oper)
-					
-					elif isinstance(oper.left.right, TagConjunction):
-						oper.left = TagDisjunction(TagNegation(oper.left.right.left), TagNegation(oper.left.right.right))
-						opers_stack.append(oper.left)
-					
-					elif isinstance(oper.left.right, TagDisjunction):
-						oper.left = TagConjunction(TagNegation(oper.left.right.left), TagNegation(oper.left.right.right))
-						opers_stack.append(oper.left)
-				
-				elif isinstance(oper.left, TagOperator):
-					opers_stack.append(oper.left)
-				
-			else:
-				raise RuntimeError()
+		if isinstance(self.root, TagOperator):
+			self.root = self.root.as_negation_normal()
+	
+	# Convert into conjunctive normal form, applying the distributability of disjunction over conjunction.
+	# Reduces any implication operations.
+	def to_conjunctive_normal_form(self):
+		self.to_negation_normal_form()
+		if isinstance(self.root, TagOperator):
+			self.root = self.root.conjunctive_normal_form()
 	
 	def conjunctive_normal_form():
 		self.negation_normal_form()
