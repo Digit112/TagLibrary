@@ -389,20 +389,20 @@ def test_tagify():
 
 #### Test library saving and loading ####
 
-def test_save_simple():
+def test_save_simple(tmpdir):
 	lib = TagLibrary(None)
 	
 	lib.create("ball")
 	lib.create("ballerina")
 	lib.create("basket")
 	
-	lib.save("test_save_simple.taglib")
-	new_lib = TagLibrary("test_save_simple.taglib")
+	lib.save(tmpdir + "/test_save_simple.taglib")
+	new_lib = TagLibrary(tmpdir + "/test_save_simple.taglib")
 	
 	new_lib.validate_integrity()
 	TagLibrary.validate_identical(lib, new_lib)
 
-def test_save_aliases():
+def test_save_aliases(tmpdir):
 	lib = TagLibrary(None)
 	
 	tag1 = lib.create("8bit")
@@ -415,13 +415,13 @@ def test_save_aliases():
 	tag5 = lib.create("quick")
 	tag4.alias(tag5)
 	
-	lib.save("test_save_aliases.taglib")
-	new_lib = TagLibrary("test_save_aliases.taglib")
+	lib.save(tmpdir + "/test_save_aliases.taglib")
+	new_lib = TagLibrary(tmpdir + "/test_save_aliases.taglib")
 	
 	new_lib.validate_integrity()
 	TagLibrary.validate_identical(lib, new_lib)
 
-def test_save_implications():
+def test_save_implications(tmpdir):
 	lib = TagLibrary(None)
 	
 	basketball = lib.create("basketball")
@@ -430,13 +430,13 @@ def test_save_implications():
 	basketball.imply(ball)
 	basketball.imply(sports)
 	
-	lib.save("test_save_implications.taglib")
-	new_lib = TagLibrary("test_save_implications.taglib")
+	lib.save(tmpdir + "/test_save_implications.taglib")
+	new_lib = TagLibrary(tmpdir + "/test_save_implications.taglib")
 	
 	new_lib.validate_integrity()
 	TagLibrary.validate_identical(lib, new_lib)
 
-def test_save_aliases_implications():
+def test_save_aliases_implications(tmpdir):
 	lib = TagLibrary(None)
 	
 	basketball = lib.create("basketball")
@@ -448,8 +448,8 @@ def test_save_aliases_implications():
 	ball.alias(sphere)
 	basketball.imply(sports)
 	
-	lib.save("test_save_aliases_implications.taglib")
-	new_lib = TagLibrary("test_save_aliases_implications.taglib")
+	lib.save(tmpdir + "/test_save_aliases_implications.taglib")
+	new_lib = TagLibrary(tmpdir + "/test_save_aliases_implications.taglib")
 	
 	new_lib.validate_integrity()
 	TagLibrary.validate_identical(lib, new_lib)
